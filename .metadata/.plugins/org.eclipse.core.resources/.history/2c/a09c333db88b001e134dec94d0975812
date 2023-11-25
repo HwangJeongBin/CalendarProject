@@ -1,0 +1,16 @@
+package calendar;
+
+import java.io.IOException;
+
+public class Main {
+
+	public static void main(String[] args){
+		try {
+			CalendarFrame frame = new CalendarFrame(2022, 7);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+}
