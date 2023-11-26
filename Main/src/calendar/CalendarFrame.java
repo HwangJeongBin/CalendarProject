@@ -130,7 +130,7 @@ public class CalendarFrame extends JFrame {
 	}
 	private void setCal(int y, int m) {
 		cal.set(cal.YEAR, y);	// 캘린더 클래스에 현재 년도를 세팅
-    	cal.set(cal.MONTH, m-1); //1월이 0부터 시작하므로 월에서 -1
+    	cal.set(cal.MONTH, m-1); //1월이 0부터 시작하므로 월에서 -1 (배열상으로 인덱스 0이 1월)
     	cal.set(Calendar.DAY_OF_MONTH,1); //DAY_OF_MONTH를 1로 설정 (월의 첫날)
     	firstweek = cal.get(Calendar.DAY_OF_WEEK); //그 주의 요일 반환 (일:1 ~ 토:7)
     	cal.set(cal.MONTH, 1);	// 캘린더 클래스에 현재 달을 세팅
@@ -364,7 +364,6 @@ public class CalendarFrame extends JFrame {
 		            	playBackFlag = true;
 		            	mouseFlag=false;
 		            	break;
-		            	// 달력을 원상태로 복구!!!!!!!!! 복구 후 다시 애니메이션 불가
 		            }
 				}
 			}
@@ -416,7 +415,7 @@ public class CalendarFrame extends JFrame {
 		@Override
 		public void mousePressed(MouseEvent e) {
 			// TODO Auto-generated method stub
-			JButton b = (JButton)e.getSource();	// 버튼 받아오는거 수정할 수 있으면 하자!!!!!!!!!!!!!!!!!!!!!
+			JButton b = (JButton)e.getSource();
 			if(b.equals(yearButton)) {
 				yearButton.setVisible(false);
 				left.setVisible(false);

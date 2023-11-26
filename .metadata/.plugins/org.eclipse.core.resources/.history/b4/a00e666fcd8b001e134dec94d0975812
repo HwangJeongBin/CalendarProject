@@ -1,0 +1,494 @@
+package calendar;
+
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Container;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Rectangle;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.io.IOException;
+import java.util.Calendar;
+
+import javax.swing.JButton;
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
+
+public class CalendarFrame extends JFrame {
+	private int eod[] = {31, 31, 2, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31}; // 2월 처리 해야됨
+	private String week[] = {"일", "월", "화", "수", "목", "금", "토"};	// 요일 String 배열로 저장
+	private DailyPlan [][]dailyPlan = new DailyPlan[12][42];	// 칸마다 그 날의 일정 관련 정보를 저장해두는 클래스
+	private MyPanel myPanel;	// 그림을 그리기 위한 판넬
+	private int firstweek;	// 그 달의 1일의 요일을 의미
+	private int year;
+	private int month;
+	private MyThread thread = new MyThread();	// 쓰레드
+	private DailyFrame dailyFrame;
+	private int gap;
+	private int W;
+	private int H;
+	private int Y;
+	private int X;
+	private boolean mouseFlag=true;	// 한번에 여러 일정 창이 떠있는걸 방지하기 위한 플래그
+	private Calendar cal = Calendar.getInstance();
+	private JButton yearButton;
+	private JButton left;
+	private JButton right;
+	private int monthWidth;	// 그림을 그리는 판넬의 너비 가져오기
+    private int monthHeight;	// 출력할 부분의 높이 가져오기
+    private int width;
+    private int height;
+	private boolean playFlag=false;
+	private boolean showYear=false;
+	private int preX;
+	private int preY;
+	private int cnt=0;
+	private NumberField yearText;
+	private int preYear;
+	public int yearCnt;
+	private boolean playBackFlag;
+	CalendarFrame(int year, int month) throws IOException {
+		this.year = year;
+		this.month = month;
+		setTitle("Priority Calendar");
+		setSize(800,1000);
+		setVisible(true);
+		Container contentPane = getContentPane();
+		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		myPanel = new MyPanel();
+		contentPane.add(myPanel);
+		myPanel.setBackground(new Color(0xeeffdd));
+    	myPanel.setVisible(true);
+    	myPanel.addMouseListener(new MyMouseListener());
+    	myPanel.setLayout(null);
+    	yearButton = new JButton(Integer.toString(year)+"년 >");
+    	yearButton.setFont(new Font("맑은 고딕",Font.BOLD,15));
+    	yearButton.setBounds(20,15,120,20);
+    	left = new JButton("<-");
+    	left.setBounds(315,13,50,20);
+    	right = new JButton("->");
+    	right.setBounds(420,13,50,20);
+    	yearButton.addMouseListener(new MyMouseListener());
+    	left.addMouseListener(new MyMouseListener());
+    	right.addMouseListener(new MyMouseListener());
+    	myPanel.add(yearButton);
+    	myPanel.add(left);
+    	myPanel.add(right);
+    	yearText = new NumberField(Integer.toString(year));
+    	yearText.setBounds(getWidth()/2-50,15,90,35);
+    	yearText.setFont(new Font("맑은 고딕",Font.BOLD,35));
+    	yearText.setBackground(new Color(0xeeffdd));
+    	yearText.setBorder(null);
+    	yearText.setEnabled(false);
+    	yearText.setVisible(false);
+    	myPanel.add(yearText);
+    	Y = 98;	// 그림을 그리는 시작점의 y값
+        X = 11;	// 그림을 그리는 시작점의 x값
+        preY = Y;
+        preX = X;
+        width = this.getWidth();
+        height = this.getHeight();
+    	monthWidth = width-10;
+		monthHeight = height-90-Y;
+		setCal(year,month);
+    	updateDailyPlan();
+    	thread.start();
+    	// this.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+    }
+	private void updateDailyPlan() {
+		for(int m=0;m<12;m++) {
+			setCal(year,m+1);
+			for(int i=0;i<42;i++) {
+	    		// 저번달 마지막 날까지의 계획
+	    		if(i+1<firstweek) {
+	    			if(m==0) {	// 만약 현재 달이 1월이면 12월의 데이터를 불러와야 함
+	    				dailyPlan[m][i] = new DailyPlan(year-1,12,eod[12]-firstweek+i+2);
+	    			}
+	    			else {
+	    				dailyPlan[m][i] = new DailyPlan(year,m,eod[m]-firstweek+i+2);
+	    			}
+	    		}
+	    		// 다음달 1일 부터의 계획
+	    		else if(eod[m+1]>=i+2-firstweek) {
+	    			dailyPlan[m][i] = new DailyPlan(year, m+1, i+2-firstweek);
+	    		}
+	    		// 현재 달의 계획
+	    		else {
+	    			if(m+1==12) { // 만약 현재 달이 12월이면 1월의 데이터를 불러와야 함
+	    				dailyPlan[m][i] = new DailyPlan(year+1, 1, i-eod[m+1]-firstweek+2);
+	    			}
+	    			else {
+	    				dailyPlan[m][i] = new DailyPlan(year, m+2, i-eod[m+1]-firstweek+2);
+	    			}
+	    		}
+			}
+		}
+	}
+	private void setCal(int y, int m) {
+		cal.set(cal.YEAR, y);	// 캘린더 클래스에 현재 년도를 세팅
+    	cal.set(cal.MONTH, m-1); //1월이 0부터 시작하므로 월에서 -1
+    	cal.set(Calendar.DAY_OF_MONTH,1); //DAY_OF_MONTH를 1로 설정 (월의 첫날)
+    	firstweek = cal.get(Calendar.DAY_OF_WEEK); //그 주의 요일 반환 (일:1 ~ 토:7)
+    	cal.set(cal.MONTH, 1);	// 캘린더 클래스에 현재 달을 세팅
+    	eod[2]=cal.getActualMaximum(Calendar.DAY_OF_MONTH);	// 그 달의 총 일수를 불러오기
+	}
+	// 캘린더 정보를 즉각적으로 업데이트 할 쓰레드 설정
+	public class MyThread extends Thread
+	{
+		private int sleep=20;
+
+		public void run()
+		{
+			// 인터럽트 됬을때 예외처리
+		    try
+		    {
+		    	while(true) {
+		    		if(playFlag) {
+		    			sleep=20;
+		    			cnt++;
+		    			monthWidth-=(monthWidth/10);
+			    		monthHeight-=(monthHeight/10);
+			    		// 행과 열을 계산하기 위하여
+			    		int mX = ((month-1)%4)*(width/4)+20;
+			    		int mY = ((month-1)/4)*(height/3)+120;
+			    		X-=(preX-mX)/15;
+			    		Y-=(preY-mY)/15;
+			    		if(cnt==15) {
+			    			// stopPlay();
+			    			playFlag=false;
+			    			showYear=true;
+			    			cnt=0;
+			    			yearText.setVisible(true);
+			    			yearText.setEnabled(true);
+			    		}
+		    		}
+		    		else if(playBackFlag) {
+		    			sleep=10;
+		    			cnt++;
+		    			monthWidth+=((width-monthWidth)/15);
+			    		monthHeight+=((height-monthHeight)/15);
+			    		// 행과 열을 계산하기 위하여
+			    		System.out.println(month);
+			    		int mX = ((month-1)%4)*(width/4)+20;
+			    		int mY = ((month-1)/4)*(height/3)+120;
+		    			if(cnt>5) {
+		    				X-=(mX-preX)/15;
+				    		Y-=(mY-preY)/15;
+		    			}
+		    			else {
+		    				X=mX;
+		    				Y=mY;
+		    			}
+			    		if(cnt==20) {
+			    			mouseFlag=true;
+			    			playBackFlag=false;
+			    			cnt=0;
+			    			X = preX;
+			            	Y = preY;
+			            	monthWidth = width-10;
+			        		monthHeight = height-90-Y;
+			        		yearButton.setVisible(true);
+							left.setVisible(true);
+							right.setVisible(true);
+							yearButton.setEnabled(true);
+							left.setEnabled(true);
+							right.setEnabled(true);
+			    		}
+		    		}
+		    		else {
+		    			sleep=50;
+		    			if(showYear) {
+			    			if(yearText.getText().length()==4) {	// 년도 네 자리가 입력되면 달력 업데이트
+			    				preYear = year;
+			    				year = Integer.parseInt(yearText.getText());
+			    				yearButton.setText(Integer.toString(year)+"년 >");
+			    				yearCnt=0;
+			    				updateDailyPlan();
+			    				repaint();
+			    			}
+			    			else {
+			    				yearCnt++;
+			    				if(yearCnt==5) {	// 년도가 네 자리가 아닌 수로 변경된 이후에 일정 시간이 지나면 원래 시간으로 복귀
+			    					yearText.setText(Integer.toString(preYear));
+			    					yearCnt=0;
+			    				}
+			    			}
+			    		}
+			    		// showYear else 처리할지 말지!!!!!!!!!!!!!!!!!!!!!!!!!
+			    		for(int i=0;i<6;i++) {
+			                for(int j=0;j<7;j++) {
+			                	dailyPlan[month-1][i*7+j].readFile();
+			                }
+			            }
+			    		if(dailyFrame!=null) {
+			    			if(dailyFrame.getLeftFlag()) {
+			    				if(month==1) {
+			    					month=12;
+			    					year--;
+			    				}
+			    				else month--;
+			    				setCal(year,month);
+			    				dailyFrame.setLeftFlag(false);
+			    			}
+			    			if(dailyFrame.getRightFlag()) {
+			    				if(month==12) {
+			    					month=1;
+			    					year++;
+			    				}
+			    				else month++;
+			    				setCal(year,month);
+			    				dailyFrame.setRightFlag(false);
+			    			}
+			    			if((!dailyFrame.isVisible())) {	// 일정 창이 닫히면 화면 클릭 이벤트 재개
+				    			mouseFlag=true;
+				    		}
+			    		}
+			    		updateDailyPlan();
+		    		}
+		    		repaint();
+		            Thread.sleep(sleep);
+		        }
+		    }catch(InterruptedException e)
+		    {
+		        System.out.println(e);
+		    }
+		}
+	}
+	class MyPanel extends JPanel {
+        private int ry;
+		private int rx;
+
+		public void paintComponent(Graphics g) {
+            super.paintComponent(g);
+            gap = 5;	// 캘린더 칸의 간격
+            W = (monthWidth-2*preX-gap*6)/7;	
+            H = (monthHeight-gap*5)/6;
+            // 간격을 고려하여 출력할 한 칸의 높낮이 값 설정
+            // 월과 요일 문자열 출력
+            for(int m=0;m<12;m++) {
+            	Loop:
+            	for(int i=0;i<6;i++) {
+                	for(int j=0;j<7;j++) {
+						if(m==month-1) {	// 현재 월의 달력 출력
+                			rx = j*(W+gap)+X;
+                    		ry = i*(H+gap)+Y;
+                		}
+                		else {
+                			if(!showYear) break Loop;
+                			rx = j*(W+gap)+(m%4)*(width/4)+20;
+        		    		ry = i*(H+gap)+(m/4)*(height/3-40)+100;
+                		}
+						if(showYear) {
+							rx = j*(W+gap)+(m%4)*(width/4)+20;
+        		    		ry = i*(H+gap)+(m/4)*(height/3-40)+120;
+						}
+						setCal(year,m+1);
+                		// 칸을 그리기 시작할 좌표 설정
+                		g.setColor(new Color(0xddffff));
+                		g.fillRect(rx,ry,W,H);
+                		g.setColor(Color.BLACK);
+                		int date = i*7+j-firstweek+2;	// 시작 요일을 계산하여 날짜를 출력할 행과 열을 설정
+                		if(i==0&&j+1<firstweek) {	// 이전 달
+                			g.setColor(Color.GRAY); // 블랙보다 흐린 그레이 컬러 사용
+                			if(showYear) g.setFont(new Font("맑은 고딕",Font.PLAIN,10));
+                			else g.setFont(new Font("맑은 고딕",Font.PLAIN,15));
+            				g.drawString(Integer.toString(eod[month-1]-firstweek+j+2), rx, ry+5);
+                		}
+                		else{
+                			// 다음 달
+                			if(date>eod[month]) {
+                				g.setColor(Color.GRAY); // 블랙보다 흐린 그레이 컬러 사용
+                				if(showYear) g.setFont(new Font("맑은 고딕",Font.PLAIN,10));
+                    			else g.setFont(new Font("맑은 고딕",Font.PLAIN,15));
+                				g.drawString(Integer.toString(date-eod[month]), rx, ry+5);
+                			}
+                			// 이번달 - 시작일~마지막날(eod)
+                			else{
+                				if(showYear) g.setFont(new Font("맑은 고딕",Font.BOLD,10));
+                    			else g.setFont(new Font("맑은 고딕",Font.BOLD,15));
+                				g.setColor(Color.BLACK);
+                				g.drawString(Integer.toString(date), rx, ry+5);
+                			}
+                		}
+                		if(dailyPlan[m][i*7+j]!=null) {
+                			if(!showYear) dailyPlan[m][i*7+j].paint(g,rx,ry+6,W,H);	// 그 날의 일정 출력 / showYear값 전달하여 년도를 보여줄때엔 string안보이게
+                		}
+                	}
+                }
+            	if(showYear) {
+					rx = (m%4)*(width/4)+20;
+		    		ry = (m/4)*(height/3-40)+120;
+		            if(!(playFlag&&m==month-1)) {
+    		    		g.setColor(Color.BLACK);
+		            	g.setFont(new Font("맑은 고딕",Font.BOLD,20));
+		            	g.drawString(Integer.toString(m+1)+"월", rx+monthWidth/3,ry-40);
+		            	g.setFont(new Font("맑은 고딕",Font.BOLD,15));
+		            	for(int s=0;s<7;s++) g.drawString(week[s],s*(W+gap)+rx+W/2-7,ry-15);
+		            }
+				}
+				else {
+	            	g.setColor(Color.BLACK);
+		            g.setFont(new Font("맑은 고딕",Font.BOLD,20));
+		            g.drawString(Integer.toString(month)+"월", X+monthWidth/2-32, Y-70);
+	            	for(int s=0;s<7;s++) g.drawString(week[s],s*(W+gap)+X+W/2-7,Y-20);
+	            }
+            }
+         }
+	}
+	private class MyMouseListener implements MouseListener {
+
+		private int clickedDate;
+		private int clickedMonth=month;
+		private int clickedYear=year;
+		@Override
+		public void mouseClicked(MouseEvent e) {
+			// TODO Auto-generated method stub
+			if(!mouseFlag) return;
+			int x = e.getX();
+			int y = e.getY();
+			int rx;
+			int ry;
+			if(showYear) {
+				for(int m=0;m<12;m++) {
+		            rx = (m%4)*(width/4)+20;
+	    		    ry = (m/4)*(height/3-40)+120;
+		            if(new Rectangle(rx,ry-60,width/4-50,height/3-70).contains(x,y)) {
+						yearText.setVisible(false);
+						yearText.setEnabled(false);
+		            	month = m+1;
+		            	showYear = false;
+		            	playBackFlag = true;
+		            	mouseFlag=false;
+		            	break;
+		            	// 달력을 원상태로 복구!!!!!!!!! 복구 후 다시 애니메이션 불가
+		            }
+				}
+			}
+			else {
+				for(int i=0;i<6;i++) {
+	            	for(int j=0;j<7;j++) {
+	            		rx = j*(W+gap)+X;
+	            		ry = i*(H+gap)+Y;
+	            		setCal(year,month);
+	            		if(new Rectangle(rx,ry,W,H).contains(x,y)) {
+	            			int d = i*7+j-firstweek+2;	// 시작 요일을 계산하여 날짜를 출력할 행과 열을 설정
+	                		if(i==0&&j+1<firstweek) {	// 이전 달
+	                			if(month==1) {
+	                				clickedYear = year-1;
+	                				clickedMonth = 12;
+	                			}
+	                			else clickedMonth = month-1;
+	                			clickedDate = eod[month-1]-firstweek+j+2;
+	                		}
+	                		else{
+	                			// 다음 달
+	                			if(d>eod[month]) {
+	                				clickedDate = d-eod[month];
+	                				if(month==12) {
+	                					clickedYear = year+1;
+	                    				clickedMonth = 1;
+	                    			}
+	                    			else clickedMonth = month+1;
+	                			}
+	                			// 이번달 - 시작일~마지막날(eod)
+	                			else{
+	                				clickedYear = year;
+	                				clickedMonth = month;
+	                				clickedDate = d;
+	                			}
+	                		}
+	                		year = clickedYear;
+	                		month = clickedMonth;
+	                		setCal(year,month);
+	                		dailyFrame = new DailyFrame(clickedYear,clickedMonth,clickedDate);
+	                		mouseFlag=false;	// 클릭 이벤트 방지
+	                		return;
+	            		}
+	            	}
+				}
+			}
+		}
+
+		@Override
+		public void mousePressed(MouseEvent e) {
+			// TODO Auto-generated method stub
+			JButton b = (JButton)e.getSource();	// 버튼 받아오는거 수정할 수 있으면 하자!!!!!!!!!!!!!!!!!!!!!
+			if(b.equals(yearButton)) {
+				yearButton.setVisible(false);
+				left.setVisible(false);
+				right.setVisible(false);
+				yearButton.setEnabled(false);
+				left.setEnabled(false);
+				right.setEnabled(false);
+				playFlag=true;
+			}
+			if(b.equals(left)) {
+				if(month==1) {
+					month=12;
+					year--;
+					yearButton.setText(Integer.toString(year)+"년 >");
+				}
+				else month--;
+				setCal(year,month);
+			}
+			if(b.equals(right)) {
+				if(month==12) {
+					month=1;
+					year++;
+					yearButton.setText(Integer.toString(year)+"년 >");
+				}
+				else month++;
+				setCal(year,month);
+			}
+		}
+
+		@Override
+		public void mouseReleased(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void mouseEntered(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+		@Override
+		public void mouseExited(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+	}
+	public class NumberField extends JTextField implements KeyListener {
+		 private static final long serialVersionUID = 1;
+		 
+		public NumberField() {
+			addKeyListener(this);
+		}
+		public NumberField(String s) {
+			addKeyListener(this);
+			this.setText(s);
+		}
+
+		public void keyPressed(KeyEvent e) {
+		}
+
+		public void keyReleased(KeyEvent e) {
+		}
+		
+		public void keyTyped(KeyEvent e) {
+		  // Get the current character you typed...
+			char c = e.getKeyChar();
+			JTextField text = (JTextField) e.getSource();
+			if (!Character.isDigit(c)||text.getText().length()>3) {
+				e.consume();
+				return;
+			}
+		}
+	}
+}

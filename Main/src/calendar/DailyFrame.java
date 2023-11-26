@@ -163,6 +163,12 @@ public class DailyFrame extends JFrame{
 						} catch (IOException e) {
 							e.printStackTrace();
 						}
+						if(numOfPlan>=6) {
+							pre.setVisible(true);
+				    		pre.setEnabled(true);
+				    		next.setVisible(true);
+				    		next.setEnabled(true);
+						}
 						if(page==1) {	// 첫번째 장에서의 수정 및 삭제 버튼 처리
 				    		pre.setVisible(false);
 				    		pre.setEnabled(false);
